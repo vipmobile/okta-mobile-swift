@@ -21,6 +21,7 @@ import FoundationNetworking
 
 class URLSessionMock: URLSessionProtocol {
     var configuration: URLSessionConfiguration = .ephemeral
+    let queue = DispatchQueue(label: "URLSessionMock")
     
     struct Call {
         let url: String
@@ -38,7 +39,9 @@ class URLSessionMock: URLSessionProtocol {
 
     private(set) var expectedCalls: [Call] = []
     func expect(call: Call) {
-        expectedCalls.append(call)
+        queue.sync {
+            expectedCalls.append(call)
+        }
     }
     
     func expect(_ url: String,
@@ -61,14 +64,16 @@ class URLSessionMock: URLSessionProtocol {
     }
 
     func call(for url: String) -> Call? {
-        guard let index = expectedCalls.firstIndex(where: { call in
-            call.url == url
-        }) else {
-            XCTFail("Mock URL \(url) not found")
-            return nil
+        queue.sync {
+            guard let index = expectedCalls.firstIndex(where: { call in
+                call.url == url
+            }) else {
+                XCTFail("Mock URL \(url) not found")
+                return nil
+            }
+            
+            return expectedCalls.remove(at: index)
         }
-        
-        return expectedCalls.remove(at: index)
     }
     
     func dataTaskWithRequest(_ request: URLRequest, completionHandler: @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionDataTaskProtocol {
@@ -92,7 +97,7 @@ class URLSessionMock: URLSessionProtocol {
     }
     
     #if swift(>=5.5.1)
-    @available(iOS 15.0, tvOS 15.0, macOS 12.0, watchOS 8, *)
+    @available(iOS 13.0, tvOS 13.0, macOS 10.15, watchOS 6, *)
     func data(for request: URLRequest, delegate: URLSessionTaskDelegate?) async throws -> (Data, URLResponse) {
         requests.append(request)
 

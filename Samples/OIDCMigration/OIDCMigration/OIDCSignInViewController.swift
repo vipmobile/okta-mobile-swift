@@ -35,7 +35,8 @@ class OIDCSignInViewController: UIViewController {
                                                object: nil)
     }
     
-    @objc func dismissProfile() {
+    @objc
+    func dismissProfile() {
         guard presentedViewController != nil else { return }
         
         self.presentedViewController?.dismiss(animated: true, completion: {
@@ -113,7 +114,7 @@ class OIDCSignInViewController: UIViewController {
             return
         }
 
-        oktaOidc?.signOutOfOkta(stateManager, from: self, callback: { error in
+        oktaOidc?.signOutOfOkta(stateManager, from: self, callback: { _ in
             try? stateManager.removeFromSecureStorage()
             self.updateUIState()
         })

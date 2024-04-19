@@ -14,17 +14,43 @@ import Foundation
 
 /// Errors that may occur when interacting with OAuth2 endpoints.
 public enum OAuth2Error: Error {
+    /// Could not create an invalid URL. This typically means the string passed to `URL` was malformed.
     case invalidUrl
+    
+    /// Cannot compose a URL to authenticate with.
     case cannotComposeUrl
-    case oauth2Error(code: String, description: String?)
+    
+    /// An OAuth2 server error was reported, with the given values.
+    case oauth2Error(code: String, description: String?, additionalKeys: [String: String]? = nil)
+    
+    /// A network error was encountered, encapsulating a ``APIClientError`` type describing the underlying error.
     case network(error: APIClientError)
+    
+    /// The given token type is missing.
     case missingToken(type: Token.Kind)
+    
+    /// Cannot perform an operation since the token is missing its client configuration.
     case missingClientConfiguration
+    
+    /// Could not verify the token's signature.
     case signatureInvalid
+    
+    /// Missing location header for token redirect.
     case missingLocationHeader
+    
+    /// Missing the given required response key in the OAuth2 redirect.
+    case missingOAuth2ResponseKey(_ name: String)
+    
+    /// The given OpenID configuration attribute is missing.
     case missingOpenIdConfiguration(attribute: String)
+    
+    /// The given nested error was thrown.
     case error(_ error: Error)
+    
+    /// Cannot revoke the given token type.
     case cannotRevoke(type: Token.RevokeType)
+    
+    /// Multiple nested ``OAuth2Error`` errors were reported.
     case multiple(errors: [OAuth2Error])
 }
 
@@ -43,7 +69,7 @@ extension OAuth2Error: LocalizedError {
                                      bundle: .authFoundation,
                                      comment: "Invalid URL")
 
-        case .oauth2Error(let code, let description):
+        case .oauth2Error(let code, let description, _):
             if let description = description {
                 return String.localizedStringWithFormat(
                     NSLocalizedString("oauth2_error_description",
@@ -110,7 +136,7 @@ extension OAuth2Error: LocalizedError {
                                   comment: "Invalid URL"),
                 errorString)
 
-        case .cannotRevoke(type: _):
+        case .cannotRevoke:
             return NSLocalizedString("cannot_revoke_token",
                                      tableName: "AuthFoundation",
                                      bundle: .authFoundation,
@@ -118,7 +144,7 @@ extension OAuth2Error: LocalizedError {
 
         case .multiple(errors: let errors):
             let errorString = errors
-                .map({ $0.localizedDescription })
+                .map(\.localizedDescription)
                 .joined(separator: ", ")
             
             return String.localizedStringWithFormat(
@@ -127,6 +153,15 @@ extension OAuth2Error: LocalizedError {
                                   bundle: .authFoundation,
                                   comment: ""),
                 errorString)
+            
+        case .missingOAuth2ResponseKey(let key):
+            return String.localizedStringWithFormat(
+                NSLocalizedString("missing_oauth2_response_key",
+                                  tableName: "AuthFoundation",
+                                  bundle: .authFoundation,
+                                  comment: ""),
+                key)
+
         }
     }
 }
@@ -145,7 +180,7 @@ extension OAuth2Error: Equatable {
         case (.missingLocationHeader, .missingLocationHeader): return true
         case (.missingClientConfiguration, .missingClientConfiguration): return true
 
-        case (.oauth2Error(code: let lhsCode, description: let lhsDescription), .oauth2Error(code: let rhsCode, description: let rhsDescription)):
+        case (.oauth2Error(code: let lhsCode, description: let lhsDescription, additionalKeys: _), .oauth2Error(code: let rhsCode, description: let rhsDescription, additionalKeys: _)):
             return (lhsCode == rhsCode && lhsDescription == rhsDescription)
             
         case (.network(error: let lhsError), .network(error: let rhsError)):

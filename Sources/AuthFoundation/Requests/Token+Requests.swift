@@ -14,30 +14,57 @@ import Foundation
 extension Token {
     struct RevokeRequest {
         let openIdConfiguration: OpenIdConfiguration
+        let clientAuthentication: OAuth2Client.ClientAuthentication
+        let url: URL
         let token: String
         let hint: Token.Kind?
         let configuration: [String: String]
+        
+        init(openIdConfiguration: OpenIdConfiguration,
+             clientAuthentication: OAuth2Client.ClientAuthentication,
+             token: String,
+             hint: Token.Kind?,
+             configuration: [String: String]) throws
+        {
+            self.openIdConfiguration = openIdConfiguration
+            self.clientAuthentication = clientAuthentication
+            self.token = token
+            self.hint = hint
+            self.configuration = configuration
+
+            guard let url = openIdConfiguration.revocationEndpoint else {
+                throw OAuth2Error.missingOpenIdConfiguration(attribute: "revocation_endpoint")
+            }
+            self.url = url
+        }
     }
 
     struct RefreshRequest {
         let openIdConfiguration: OpenIdConfiguration
-        let token: Token
         let resource: String
         let clientSecret: String
+        let clientConfiguration: OAuth2Client.Configuration
+        let refreshToken: String
+        let id: String
         let configuration: [String: String]
+        
+        static let placeholderId = "temporary_id"
     }
     
     struct IntrospectRequest {
         let openIdConfiguration: OpenIdConfiguration
+        let clientConfiguration: OAuth2Client.Configuration
         let token: Token
         let type: Token.Kind
         let url: URL
         
         init(openIdConfiguration: OpenIdConfiguration,
+             clientConfiguration: OAuth2Client.Configuration,
              token: Token,
              type: Token.Kind) throws
         {
             self.openIdConfiguration = openIdConfiguration
+            self.clientConfiguration = clientConfiguration
             self.token = token
             self.type = type
             
@@ -63,7 +90,6 @@ extension Token.RevokeRequest: OAuth2APIRequest, APIRequestBody {
     typealias ResponseType = Empty
     
     var httpMethod: APIRequestMethod { .post }
-    var url: URL { openIdConfiguration.revocationEndpoint ?? URL(string: "ADFS Does not use this feature. If you hit this url you will crash.")! }
     var contentType: APIContentType? { .formEncoded }
     var acceptsType: APIContentType? { .json }
     var bodyParameters: [String: Any]? {
@@ -74,6 +100,10 @@ extension Token.RevokeRequest: OAuth2APIRequest, APIRequestBody {
             result["token_type_hint"] = hint.rawValue
         }
         
+        if let parameters = clientAuthentication.additionalParameters {
+            result.merge(parameters, uniquingKeysWith: { $1 })
+        }
+
         return result
     }
 }
@@ -86,43 +116,56 @@ extension Token.IntrospectRequest: OAuth2APIRequest, APIRequestBody {
     var acceptsType: APIContentType? { .json }
     var authorization: APIAuthorization? { nil }
     var bodyParameters: [String: Any]? {
-        [
+        var result = [
             "token": (token.token(of: type) ?? "") as String,
             "client_id": token.context.configuration.clientId,
             "token_type_hint": type.rawValue
         ]
+        
+        if let parameters = clientConfiguration.authentication.additionalParameters {
+            result.merge(parameters, uniquingKeysWith: { $1 })
+        }
+
+        return result
     }
 }
 
-extension Token.RefreshRequest: OAuth2APIRequest, APIRequestBody, APIParsingContext {
+extension Token.RefreshRequest: OAuth2APIRequest, APIRequestBody, APIParsingContext, OAuth2TokenRequest {
     typealias ResponseType = Token
 
     var httpMethod: APIRequestMethod { .post }
     var url: URL { openIdConfiguration.tokenEndpoint }
     var contentType: APIContentType? { .formEncoded }
     var acceptsType: APIContentType? { .json }
+    var clientId: String { clientConfiguration.clientId }
     var bodyParameters: [String: Any]? {
-        guard let refreshToken = token.refreshToken else { return nil }
-
         var result = configuration
         result["grant_type"] = "refresh_token"
         result["refresh_token"] = refreshToken
         result["resource"] = resource
         result["client_secret"] = clientSecret
-        
+
+        if let parameters = clientConfiguration.authentication.additionalParameters {
+            result.merge(parameters, uniquingKeysWith: { $1 })
+        }
+
         return result
     }
     
     var codingUserInfo: [CodingUserInfoKey: Any]? {
-        guard let clientSettings = token.context.clientSettings,
-              let settings = clientSettings.reduce(into: [:], { partialResult, item in
+        guard let settings = configuration.reduce(into: [:], { partialResult, item in
             guard let key = CodingUserInfoKey(rawValue: item.key) else { return }
             partialResult?[key] = item.value
         }) else { return nil }
         
-        return [
-            .clientSettings: settings,
-            .tokenId: token.id
+        var result: [CodingUserInfoKey: Any] = [
+            .clientSettings: settings
         ]
+        
+        if id != Self.placeholderId {
+            result[.tokenId] = id
+        }
+        
+        return result
     }
 }

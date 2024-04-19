@@ -14,10 +14,20 @@ import Foundation
 
 /// Describes errors that may occur when working with tokens.
 public enum TokenError: Error {
+    /// Context information related to this token is missing. This information is used to construct a ``OAuth2Client`` instance that could be used for this token.
     case contextMissing
+    
+    /// The token with the requested ID was not found.
     case tokenNotFound(id: String)
+    
+    /// Could not replace the token with its updated value.
     case cannotReplaceToken
+    
+    /// Could not add a new token, since a duplicate was found.
     case duplicateTokenAdded
+    
+    /// This token does not match the client configuration. This can only occur when a token's context does not match the ``OAuth2Client`` it is used with.
+    case invalidConfiguration
 }
 
 extension TokenError: LocalizedError {
@@ -45,6 +55,12 @@ extension TokenError: LocalizedError {
             
         case .duplicateTokenAdded:
             return NSLocalizedString("duplicate_token_added",
+                                     tableName: "AuthFoundation",
+                                     bundle: .authFoundation,
+                                     comment: "")
+
+        case .invalidConfiguration:
+            return NSLocalizedString("invalid_configuration",
                                      tableName: "AuthFoundation",
                                      bundle: .authFoundation,
                                      comment: "")

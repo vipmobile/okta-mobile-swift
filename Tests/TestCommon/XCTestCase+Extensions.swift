@@ -19,6 +19,15 @@ enum TestError: Error {
 }
 
 public extension XCTestCase {
+    func mock<T: Decodable & JSONDecodable>(from bundle: Bundle,
+                 for filename: String,
+                 in folder: String? = nil) throws -> T
+    {
+        let data = try data(from: bundle, for: filename, in: folder)
+        let string = try XCTUnwrap(String(data: data, encoding: .utf8))
+        return try decode(type: T.self, string)
+    }
+    
     func data(for json: String) -> Data {
         return json.data(using: .utf8)!
     }
@@ -44,12 +53,12 @@ public extension XCTestCase {
         return try Data(contentsOf: file)
     }
     
-    func decode<T>(type: T.Type, _ file: URL) throws -> T where T : Decodable {
+    func decode<T>(type: T.Type, _ file: URL) throws -> T where T : Decodable & JSONDecodable {
         let json = String(data: try data(for: file), encoding: .utf8)
         return try decode(type: type, json!)
     }
 
-    func decode<T>(type: T.Type, _ file: URL, _ test: ((T) throws -> Void)) throws where T : Decodable {
+    func decode<T>(type: T.Type, _ file: URL, _ test: ((T) throws -> Void)) throws where T : Decodable & JSONDecodable {
         let json = String(data: try data(for: file), encoding: .utf8)
         try test(try decode(type: type, json!))
     }
@@ -58,11 +67,7 @@ public extension XCTestCase {
         try decode(type: type, decoder: T.jsonDecoder, json)
     }
 
-    func decode<T>(type: T.Type, _ json: String) throws -> T where T : Decodable {
-        try decode(type: type, decoder: JSONDecoder(), json)
-    }
-
-    func decode<T>(type: T.Type, _ json: String, _ test: ((T) throws -> Void)) throws where T : Decodable {
+    func decode<T>(type: T.Type, _ json: String, _ test: ((T) throws -> Void)) throws where T : Decodable & JSONDecodable {
         try test(try decode(type: type, json))
     }
 
@@ -70,4 +75,28 @@ public extension XCTestCase {
         let jsonData = data(for: json)
         return try decoder.decode(T.self, from: jsonData)
     }
+    
+    #if swift(>=5.5.1)
+    @available(iOS 13.0, tvOS 13.0, macOS 10.15, watchOS 6, *)
+    func perform(queueCount: Int = 5, iterationCount: Int = 10, _ block: @escaping () async throws -> Void) rethrows {
+        let queues: [DispatchQueue] = (0..<queueCount).map { queueNumber in
+            DispatchQueue(label: "Async queue \(queueNumber)")
+        }
+        
+        let group = DispatchGroup()
+        for queue in queues {
+            for _ in 0..<iterationCount {
+                queue.async {
+                    group.enter()
+                    Task {
+                        try await block()
+                        group.leave()
+                    }
+                }
+            }
+        }
+        
+        _ = group.wait(timeout: .short)
+    }
+    #endif
 }
